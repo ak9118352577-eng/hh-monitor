@@ -1,7 +1,7 @@
 """
 HH.ru Вакансии Монитор — для Railway
 Алексей Кулик | @aleksey93_hh_bot
-Версия 4.0 — постоянная память через Telegram (не слетает при перезапуске)
+Версия 5.0 — OpenAI + детальный профиль + постоянная память
 """
 
 import requests
@@ -13,9 +13,8 @@ from datetime import datetime, timezone, timedelta
 # ══════════════════════════════════════════════
 TOKEN            = os.environ.get("BOT_TOKEN", "")
 CHAT_ID          = os.environ.get("CHAT_ID", "")
-CLAUDE_API_KEY   = os.environ.get("CLAUDE_API_KEY", "")
+OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "")
 INTERVAL_MINUTES = int(os.environ.get("INTERVAL", "30"))
-# ID сообщения где хранится список виденных вакансий
 MEMORY_MSG_ID    = os.environ.get("MEMORY_MSG_ID", "")
 
 KEYWORDS = [
@@ -28,164 +27,207 @@ KEYWORDS = [
 ]
 
 AREA         = 2
-HOURS_FILTER = 48  # увеличили до 48 часов для надёжности
+HOURS_FILTER = 48
 SEEN_FILE    = "seen_vacancies.json"
 
+# ══════════════════════════════════════════════
+#  ДЕТАЛЬНЫЙ ПРОФИЛЬ КАНДИДАТА
+# ══════════════════════════════════════════════
 CANDIDATE_PROFILE = """
-Имя: Алексей Кулик
-Роль: Исполнительный директор / COO, Санкт-Петербург
-Опыт: 13 лет операционного управления
-Выручка: более 1 млрд руб./год
-Команда: 45 человек в прямом подчинении
+ФИО: Кулик Алексей Дмитриевич
+Возраст: 32 года
+Город: Санкт-Петербург
+Телефон: +7 (911) 835-25-77
+Email: kulik-alexey@mail.ru
+
+ОПЫТ РАБОТЫ — 13 лет 10 месяцев
+
+1. Silentium Company — Исполнительный директор (февраль 2022 — настоящее время, 4 года)
+Группа компаний: розничная сеть ювелирных изделий, сеть ломбардов, производство.
+Прямое подчинение: 45 человек (снабжение, бухгалтерия, IT, техотдел, склады).
+Выручка группы: более 1 млрд руб./год. Полная ответственность за P&L и операционный бюджет.
+
+Ключевые достижения:
+— Разработал 3-летнюю стратегию развития сети — выручка группы выросла на 55% за 2 года
+— Запустил флагманский объект площадью 2700 м² с международным туристическим трафиком — рост продаж на точке в 4 раза
+— Оптимизировал логистику и складской учёт — снижение операционных издержек на 26% без потери качества
+— Внедрил CRM-систему и обновил IT-инфраструктуру — время обработки заказов сократилось на 20%
+— Выстроил систему KPI для всех подразделений — рост исполнительской дисциплины
+— Провёл переговоры с арендодателями: дисконты, расторжение убыточных договоров, экономия 3+ млн руб./год
+— Выстроил управленческую отчётность по 21 юрлицу в 7 налоговых режимах
+— Закрыл 100% страховых случаев с полным получением выплат
+— Успешно провёл переговоры с ключевыми поставщиками: отсрочки платежей, улучшение оборотного капитала
+
+2. Silentium Company — Руководитель сети ломбардов (январь 2019 — настоящее время, 7 лет)
+Управление сетью из 6 ломбардов и 4 скупок. Подчинение — 17 сотрудников.
+Лицензируемый вид деятельности (ЦБ РФ).
+
+Ключевые достижения:
+— Открыл 3 новых ломбарда с нуля — полный цикл: помещение, регистрация, лицензирование, найм
+— Внедрил систему мотивации оценщиков — объём выданных займов вырос на 75%
+— Обеспечил полное соответствие ЦБ РФ, ГИИС ДМДК, РФМ — все проверки без штрафов
+— Организовал реализацию невостребованного имущества через Avito и агрегаторы — оборот +45%
+— Разработал регламенты оценки, хранения и страхования залогов
+
+3. Silentium Company — Заместитель руководителя отдела безопасности (апрель 2016 — январь 2019)
+Комплексная безопасность розничной сети: 30+ объектов.
+
 Достижения:
-- Рост выручки группы +55% за 2 года
-- Снижение операционных издержек −26%
-- Рост займов ломбардной сети +75%
-- Открыл 10+ объектов с нуля
-- Снижение потерь от хищений −80%
-- Внедрил CRM, KPI-системы, отчётность по 21 юрлицу
-- Опыт: ЦБ РФ, ГИИС ДМДК, РФМ, 7 налоговых режимов
-Контакт: +7 (911) 835-25-77 | kulik-alexey@mail.ru
+— Внедрил единую систему видеонаблюдения и контроля доступа — потери от хищений снизились на 80%
+— Провёл 20 служебных расследований; возбуждено 4 уголовных дела, возвращено имущества на 3+ млн руб.
+— Обучил персонал противодействию мошенничеству — число инцидентов сократилось вдвое
+
+4. ЗАО НПФ ТИРС — Инженер радиоэлектроники (июнь 2012 — апрель 2016)
+
+ОБРАЗОВАНИЕ:
+— СПбГПУ, 2015, Факультет экономики и менеджмента, Информационные системы в экономике и менеджменте
+— Политехнический колледж, 2012, Программное обеспечение ВТ
+
+КОМПЕТЕНЦИИ:
+Управление: операционное управление холдингом, P&L, бюджетирование, стратегическое планирование,
+антикризисное управление, масштабирование бизнеса, KPI-системы, управление персоналом 45+ чел.
+
+Финансы и право: ЦБ РФ, ГИИС ДМДК, РФМ, 115-ФЗ, 7 налоговых режимов, комплаенс,
+переговоры с ФНС и Росреестром, страхование объектов, коммерческая недвижимость.
+
+Технологии: 1С:Предприятие, 1С Ломбард, CRM-системы, Avito, маркетплейсы, SEO,
+видеонаблюдение, СКУД, IT-инфраструктура.
+
+ЛИЧНЫЕ КАЧЕСТВА:
+Системное мышление, умение выстраивать процессы с нуля, жёсткий контроль операционных показателей,
+умение работать в режиме многозадачности, опыт взаимодействия с собственником бизнеса напрямую,
+самостоятельность в принятии решений, лидерство.
+
+Права: категории B, C. Личный автомобиль. Готов к редким командировкам.
+"""
+
+SYSTEM_PROMPT = """Ты помогаешь Алексею Кулику писать сопроводительные письма для откликов на вакансии.
+
+Твоя задача — написать короткое, живое, деловое письмо от первого лица.
+
+Правила:
+1. Максимум 5-7 предложений — не больше
+2. Начинай сразу с сути — без "Добрый день", без вступлений
+3. Упомяни 2-3 конкретных достижения с цифрами которые релевантны именно этой вакансии
+4. Пиши как живой человек — без канцелярита, без шаблонных фраз типа "рад предложить свою кандидатуру"
+5. Не используй слова: "резюме прилагаю", "с уважением", "буду рад", "хотел бы"
+6. Заканчивай конкретным предложением о встрече или звонке
+7. Письмо должно звучать как написанное опытным руководителем — уверенно и по делу
+8. Не упоминай что это написано ИИ
+9. Адаптируй под специфику конкретной вакансии — если ломбарды, акцент на ломбарды; если ритейл — на ритейл
 """
 
 
 # ══════════════════════════════════════════════
-#  ПАМЯТЬ — хранится в Telegram сообщении
+#  TELEGRAM HELPERS
 # ══════════════════════════════════════════════
-
-def tg_request(method, **kwargs):
+def tg(method, **kwargs):
     url = f"https://api.telegram.org/bot{TOKEN}/{method}"
     try:
         r = requests.post(url, json=kwargs, timeout=10)
         return r.json()
     except Exception as e:
-        print(f"TG error {method}: {e}")
+        print(f"TG {method} error: {e}")
         return {}
 
 
-def load_seen_from_telegram():
-    """Читает список виденных вакансий из закреплённого сообщения"""
-    global MEMORY_MSG_ID
-    if not MEMORY_MSG_ID:
-        return set()
-    try:
-        # Получаем сообщение по ID
-        r = tg_request("forwardMessage",
-            chat_id=CHAT_ID,
-            from_chat_id=CHAT_ID,
-            message_id=int(MEMORY_MSG_ID)
-        )
-        # Проще — просто читаем из локального файла как резерв
-    except Exception:
-        pass
-    return load_seen_local()
-
-
-def load_seen_local():
+# ══════════════════════════════════════════════
+#  ПАМЯТЬ
+# ══════════════════════════════════════════════
+def load_seen():
     if os.path.exists(SEEN_FILE):
         with open(SEEN_FILE, "r") as f:
             return set(json.load(f))
+
+    if MEMORY_MSG_ID:
+        try:
+            r = requests.get(
+                f"https://api.telegram.org/bot{TOKEN}/getChat",
+                params={"chat_id": CHAT_ID}, timeout=10
+            )
+            pinned = r.json().get("result", {}).get("pinned_message", {})
+            if pinned and str(pinned.get("message_id")) == MEMORY_MSG_ID:
+                text = pinned.get("text", "")
+                if "MEMORY" in text:
+                    ids = json.loads(text.replace("🗄 MEMORY\n", ""))
+                    seen = set(ids)
+                    with open(SEEN_FILE, "w") as f:
+                        json.dump(list(seen), f)
+                    print(f"Память восстановлена: {len(seen)} вакансий")
+                    return seen
+        except Exception as e:
+            print(f"Ошибка восстановления памяти: {e}")
     return set()
 
 
 def save_seen(seen):
-    """Сохраняет локально + отправляет резервную копию в Telegram"""
     global MEMORY_MSG_ID
-
-    # Локальное сохранение
     with open(SEEN_FILE, "w") as f:
         json.dump(list(seen), f)
 
-    # Резервная копия в Telegram — обновляем или создаём сообщение
-    seen_text = f"🗄 MEMORY\n{json.dumps(list(seen)[-500:])}"  # последние 500 ID
-
+    seen_text = f"🗄 MEMORY\n{json.dumps(list(seen)[-1000:])}"
     if MEMORY_MSG_ID:
-        # Обновляем существующее сообщение
-        tg_request("editMessageText",
-            chat_id=CHAT_ID,
-            message_id=int(MEMORY_MSG_ID),
-            text=seen_text
-        )
+        tg("editMessageText",
+           chat_id=CHAT_ID,
+           message_id=int(MEMORY_MSG_ID),
+           text=seen_text)
     else:
-        # Создаём новое сообщение-хранилище
-        r = tg_request("sendMessage",
-            chat_id=CHAT_ID,
-            text=seen_text,
-            disable_notification=True
-        )
+        r = tg("sendMessage",
+               chat_id=CHAT_ID,
+               text=seen_text,
+               disable_notification=True)
         if r.get("ok"):
-            msg_id = str(r["result"]["message_id"])
-            MEMORY_MSG_ID = msg_id
-            print(f"Создано хранилище памяти, ID сообщения: {msg_id}")
-            print(f"Добавьте в Railway переменную MEMORY_MSG_ID = {msg_id}")
-            # Закрепляем сообщение
-            tg_request("pinChatMessage",
-                chat_id=CHAT_ID,
-                message_id=int(msg_id),
-                disable_notification=True
-            )
-
-
-def load_seen():
-    """Загружает память — сначала локально, при перезапуске восстанавливает из Telegram"""
-    local = load_seen_local()
-    if local:
-        return local
-
-    # Если локальный файл пуст (перезапуск) — читаем из Telegram
-    if MEMORY_MSG_ID:
-        try:
-            # Получаем обновления чтобы найти сообщение с памятью
-            r = requests.get(
-                f"https://api.telegram.org/bot{TOKEN}/getChat",
-                params={"chat_id": CHAT_ID},
-                timeout=10
-            )
-            # Пробуем прочитать закреплённое сообщение
-            chat_data = r.json().get("result", {})
-            pinned = chat_data.get("pinned_message", {})
-            if pinned and str(pinned.get("message_id")) == MEMORY_MSG_ID:
-                text = pinned.get("text", "")
-                if "MEMORY" in text:
-                    ids_json = text.replace("🗄 MEMORY\n", "")
-                    ids = json.loads(ids_json)
-                    seen = set(ids)
-                    # Восстанавливаем локально
-                    with open(SEEN_FILE, "w") as f:
-                        json.dump(list(seen), f)
-                    print(f"Память восстановлена из Telegram: {len(seen)} вакансий")
-                    return seen
-        except Exception as e:
-            print(f"Ошибка восстановления памяти: {e}")
-
-    return set()
+            mid = str(r["result"]["message_id"])
+            MEMORY_MSG_ID = mid
+            print(f"Создано хранилище памяти, ID сообщения: {mid}")
+            print(f"Добавьте в Railway переменную MEMORY_MSG_ID = {mid}")
+            tg("pinChatMessage",
+               chat_id=CHAT_ID,
+               message_id=int(mid),
+               disable_notification=True)
 
 
 # ══════════════════════════════════════════════
-#  ОСНОВНАЯ ЛОГИКА
+#  HH.RU
 # ══════════════════════════════════════════════
-
-def is_fresh(vacancy):
-    published = vacancy.get("published_at")
-    if not published:
+def is_fresh(v):
+    pub = v.get("published_at")
+    if not pub:
         return True
     try:
-        pub_time = datetime.fromisoformat(published.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
-        return (now - pub_time) <= timedelta(hours=HOURS_FILTER)
+        pt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - pt) <= timedelta(hours=HOURS_FILTER)
     except Exception:
         return True
 
 
-def get_vacancy_details(vacancy_id):
-    url = f"https://api.hh.ru/vacancies/{vacancy_id}"
-    headers = {"User-Agent": "hh-monitor-bot/4.0"}
+def search_vacancies(keyword):
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(
+            "https://api.hh.ru/vacancies",
+            params={"text": keyword, "area": AREA, "per_page": 20,
+                    "order_by": "publication_time", "search_field": "name"},
+            headers={"User-Agent": "hh-monitor/5.0"},
+            timeout=10
+        )
+        if r.status_code == 200:
+            return r.json().get("items", [])
+    except Exception as e:
+        print(f"HH error: {e}")
+    return []
+
+
+def get_vacancy_details(vid):
+    try:
+        r = requests.get(
+            f"https://api.hh.ru/vacancies/{vid}",
+            headers={"User-Agent": "hh-monitor/5.0"},
+            timeout=10
+        )
         if r.status_code == 200:
             return r.json()
     except Exception as e:
-        print(f"Ошибка вакансии: {e}")
+        print(f"Vacancy detail error: {e}")
     return None
 
 
@@ -195,62 +237,59 @@ def clean_html(text):
         return ""
     text = re.sub(r'<[^>]+>', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
-    return text[:2000]
+    return text[:3000]
 
 
-def generate_cover_letter(vacancy_title, company, description):
-    if not CLAUDE_API_KEY:
+# ══════════════════════════════════════════════
+#  OPENAI — ГЕНЕРАЦИЯ ПИСЬМА
+# ══════════════════════════════════════════════
+def generate_cover_letter(title, company, description):
+    if not OPENAI_API_KEY:
         return None
-    prompt = f"""Напиши короткое сопроводительное письмо (5-6 предложений) для отклика.
 
-Вакансия: {vacancy_title}
+    user_prompt = f"""Напиши сопроводительное письмо для отклика на эту вакансию.
+
+Вакансия: {title}
 Компания: {company}
-Описание: {description}
+Описание вакансии:
+{description}
 
-Кандидат:
+Профиль кандидата:
 {CANDIDATE_PROFILE}
 
-Требования: коротко, с цифрами, живой язык, без "Добрый день" и подписи."""
+Выбери 2-3 достижения которые максимально релевантны именно этой вакансии.
+Письмо должно быть живым, деловым, уверенным — не шаблонным."""
 
     try:
         r = requests.post(
-            "https://api.anthropic.com/v1/messages",
+            "https://api.openai.com/v1/chat/completions",
             headers={
-                "x-api-key": CLAUDE_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
             },
             json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 500,
-                "messages": [{"role": "user", "content": prompt}],
+                "model": "gpt-4o-mini",
+                "max_tokens": 600,
+                "temperature": 0.7,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user",   "content": user_prompt},
+                ],
             },
             timeout=30,
         )
         if r.status_code == 200:
-            return r.json()["content"][0]["text"]
+            return r.json()["choices"][0]["message"]["content"]
+        else:
+            print(f"OpenAI error: {r.status_code} {r.text[:200]}")
     except Exception as e:
-        print(f"Claude error: {e}")
+        print(f"OpenAI exception: {e}")
     return None
 
 
-def search_vacancies(keyword):
-    url = "https://api.hh.ru/vacancies"
-    params = {
-        "text": keyword, "area": AREA,
-        "per_page": 20, "order_by": "publication_time",
-        "search_field": "name",
-    }
-    try:
-        r = requests.get(url, params=params,
-                         headers={"User-Agent": "hh-monitor/4.0"}, timeout=10)
-        if r.status_code == 200:
-            return r.json().get("items", [])
-    except Exception as e:
-        print(f"HH error: {e}")
-    return []
-
-
+# ══════════════════════════════════════════════
+#  ОТПРАВКА ВАКАНСИИ
+# ══════════════════════════════════════════════
 def send_vacancy(v, keyword):
     title   = v.get("name", "—")
     company = v.get("employer", {}).get("name", "—")
@@ -268,7 +307,9 @@ def send_vacancy(v, keyword):
             pass
 
     if salary:
-        sf, st, cur = salary.get("from"), salary.get("to"), salary.get("currency","RUB")
+        sf = salary.get("from")
+        st = salary.get("to")
+        cur = salary.get("currency", "RUB")
         if sf and st:
             sal = f"{sf:,}–{st:,} {cur}".replace(",", " ")
         elif sf:
@@ -280,31 +321,34 @@ def send_vacancy(v, keyword):
     else:
         sal = "не указана"
 
-    tg_request("sendMessage",
-        chat_id=CHAT_ID,
-        text=(f"🔔 <b>{title}</b>\n"
-              f"🏢 {company}\n"
-              f"💰 {sal}{pub_str}\n"
-              f"🔍 <i>{keyword}</i>\n"
-              f"🔗 <a href='{url}'>Открыть на hh.ru</a>"),
-        parse_mode="HTML",
-        disable_web_page_preview=False,
-    )
+    # Карточка вакансии
+    tg("sendMessage",
+       chat_id=CHAT_ID,
+       text=(f"🔔 <b>{title}</b>\n"
+             f"🏢 {company}\n"
+             f"💰 {sal}{pub_str}\n"
+             f"🔍 <i>{keyword}</i>\n"
+             f"🔗 <a href='{url}'>Открыть на hh.ru</a>"),
+       parse_mode="HTML",
+       disable_web_page_preview=False)
 
-    if CLAUDE_API_KEY:
+    # Сопроводительное письмо
+    if OPENAI_API_KEY:
         details = get_vacancy_details(vid)
         if details:
             desc = clean_html(details.get("description", ""))
             letter = generate_cover_letter(title, company, desc)
             if letter:
-                tg_request("sendMessage",
-                    chat_id=CHAT_ID,
-                    text=f"📝 <b>Сопроводительное письмо:</b>\n\n{letter}",
-                    parse_mode="HTML",
-                )
-                time.sleep(0.5)
+                tg("sendMessage",
+                   chat_id=CHAT_ID,
+                   text=f"📝 <b>Сопроводительное письмо:</b>\n\n{letter}",
+                   parse_mode="HTML")
+                time.sleep(1)
 
 
+# ══════════════════════════════════════════════
+#  ОСНОВНОЙ ЦИКЛ
+# ══════════════════════════════════════════════
 def check_and_notify():
     seen = load_seen()
     new_count = old_count = 0
@@ -330,7 +374,7 @@ def check_and_notify():
 
 def main():
     global CHAT_ID
-    print("HH.ru Монитор v4.0 — с постоянной памятью")
+    print("HH.ru Монитор v5.0 — OpenAI + постоянная память")
 
     if not CHAT_ID:
         r = requests.get(
@@ -344,19 +388,18 @@ def main():
             print("Напишите /start боту и перезапустите")
             return
 
-    letter_status = "✅ С письмами" if CLAUDE_API_KEY else "⏳ Без писем (ждём баланс)"
+    letter_status = "✅ С письмами (OpenAI)" if OPENAI_API_KEY else "⚠️ Без писем — добавьте OPENAI_API_KEY"
 
-    tg_request("sendMessage",
-        chat_id=CHAT_ID,
-        text=(f"✅ <b>Монитор v4.0 запущен!</b>\n\n"
-              f"Запросы: {len(KEYWORDS)} шт.\n"
-              f"📍 Санкт-Петербург\n"
-              f"⏱ Каждые {INTERVAL_MINUTES} минут\n"
-              f"📅 За последние {HOURS_FILTER} часов\n"
-              f"🧠 Постоянная память (не слетает)\n"
-              f"📝 {letter_status}"),
-        parse_mode="HTML",
-    )
+    tg("sendMessage",
+       chat_id=CHAT_ID,
+       text=(f"✅ <b>Монитор v5.0 запущен!</b>\n\n"
+             f"Запросы: {len(KEYWORDS)} шт.\n"
+             f"📍 Санкт-Петербург\n"
+             f"⏱ Каждые {INTERVAL_MINUTES} минут\n"
+             f"📅 За последние {HOURS_FILTER} часов\n"
+             f"🧠 Постоянная память\n"
+             f"📝 {letter_status}"),
+       parse_mode="HTML")
 
     check_and_notify()
 
